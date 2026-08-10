@@ -1,0 +1,69 @@
+<?php
+namespace Pyncer\Snyppet\Access\Component\Module\Token\Totp;
+
+use OTPHP\TOTP;
+use Pyncer\Snyppet\Access\Component\Module\Token\PatchTokenItemModule as PyncerPatchTokenItemModule;
+use Pyncer\Snyppet\Access\Table\User\Totp\TotpMapper;
+
+use const Pyncer\Snyppet\Access\TOTP_SCHEME as PYNCER_ACCESS_TOTP_SCHEME;
+
+class PatchTokenItemModule extends PyncerPatchTokenItemModule
+{
+    public function getScheme(): ?string
+    {
+        // ForgeMapperQuery will use this value.
+        return PYNCER_ACCESS_TOTP_SCHEME;
+    }
+
+    protected function login(AccessManager $accessManager): ?bool
+    {
+        $result = parent::login($accessManager);
+
+        if ($result === true) {
+            $connection = $this->get(ID::DATABASE);
+
+            if ($model !== null && $model->getEnabled()) {
+                $this->isTotp = true;
+            }
+        }
+
+        return $result;
+    }
+
+    protected function updateItem(ModelInterface $model): array
+    {
+        $mapper = new TotpMapper($connection);
+        $model = $mapper->selectByUserId($model->getUserId());
+
+        if ($model === null || !$model->getEnabled()) {
+            $errors = [
+                'general' => 'disabled'
+            ];
+
+            return $errors;
+        }
+
+        $totp = TOTP::createFromSecret($model->getSecret());
+        $code = $this->parsedBody->getString('code', null);
+
+        if ($code === null) {
+            $errors = [
+                'code' => 'required'
+            ];
+
+            return $errors;
+        }
+
+        if (!$totp->verify($code, null, 1)) {
+            $errors = [
+                'code' => 'invalid'
+            ];
+
+            return $errors;
+        }
+
+        $model->setScheme(parent::getScheme() ?? PYNCER_ACCESS_DEFAULT_SCHEME);
+
+        return parent::updateItem($model);
+    }
+}
