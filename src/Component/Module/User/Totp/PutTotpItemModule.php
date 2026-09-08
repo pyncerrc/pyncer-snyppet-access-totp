@@ -5,6 +5,7 @@ use OTPHP\TOTP;
 use Psr\Http\Message\ResponseInterface as PsrResponseInterface;
 use Pyncer\App\Identifier as ID;
 use Pyncer\Component\Module\AbstractModule;
+use Pyncer\Database\Exception\QueryException;
 use Pyncer\Http\Message\JsonResponse;
 use Pyncer\Http\Message\Response;
 use Pyncer\Http\Message\Status;
@@ -12,9 +13,14 @@ use Pyncer\Snyppet\Access\Table\User\UserMapper;
 use Pyncer\Snyppet\Access\Table\User\Totp\TotpMapper;
 use Pyncer\Snyppet\Access\Table\User\Totp\TotpValidator;
 use Pyncer\Snyppet\Access\User\LoginMethod;
+use Pyncer\Snyppet\Access\Totp\TotpMethod;
 
 use const Pyncer\Snyppet\Access\LOGIN_METHOD as PYNCER_ACCESS_LOGIN_METHOD;
 use const Pyncer\Snyppet\Access\TOTP_ISSUER as PYNCER_ACCESS_TOTP_ISSUER;
+
+use const Pyncer\Snyppet\Access\TOTP_METHOD_APP_ENABLED AS PYNCER_ACCESS_TOTP_METHOD_APP_ENABLED;
+use const Pyncer\Snyppet\Access\TOTP_METHOD_EMAIL_ENABLED AS PYNCER_ACCESS_TOTP_METHOD_EMAIL_ENABLED;
+use const Pyncer\Snyppet\Access\TOTP_METHOD_PHONE_ENABLED AS PYNCER_ACCESS_TOTP_METHOD_PHONE_ENABLED;
 
 class PutTotpItemModule extends AbstractModule
 {
@@ -109,12 +115,43 @@ class PutTotpItemModule extends AbstractModule
             ]);
         }
 
+        $errors = [];
+
+        $method = $this->parsedBody->getString('method', 'app');
+        $method = TotpMethod::tryFrom($method);
+
+        if ($method === null) {
+            $errors['method'] = 'invalid'
+        } elseif ($method === TotpMethod::APP &&
+            !PYNCER_ACCESS_TOTP_METHOD_APP_ENABLED
+        ) {
+            $errors['method'] = 'invalid'
+        } elseif ($method === TotpMethod::EMAIL &&
+            !PYNCER_ACCESS_TOTP_METHOD_EMAIL_ENABLED
+        ) {
+            $errors['method'] = 'invalid'
+        } elseif ($method === TotpMethod::PHONE &&
+            !PYNCER_ACCESS_TOTP_METHOD_PHONE_ENABLED
+        ) {
+            $errors['method'] = 'invalid'
+        }
+
+        if ($errors) {
+            return new JsonResponse(
+                Status::CLIENT_ERROR_422_UNPROCESSABLE_ENTITY,
+                ['errors' => $errors]
+            );
+        }
+
         $regenerate = $this->parsedBody->getBool('regenerate');
 
         if ($model->getSecret() === '' || $regenerate) {
             $totp = TOTP::create();
+
             $model->setSecret($totp->getSecret());
         }
+
+        $model->setMethod($method);
 
         $model->setEnabled($enabled);
 

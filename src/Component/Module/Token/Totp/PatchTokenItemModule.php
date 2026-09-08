@@ -4,8 +4,12 @@ namespace Pyncer\Snyppet\Access\Component\Module\Token\Totp;
 use OTPHP\TOTP;
 use Pyncer\Snyppet\Access\Component\Module\Token\PatchTokenItemModule as PyncerPatchTokenItemModule;
 use Pyncer\Snyppet\Access\Table\User\Totp\TotpMapper;
+use Pyncer\Snyppet\Access\Totp\TotpMethod;
 
 use const Pyncer\Snyppet\Access\TOTP_SCHEME as PYNCER_ACCESS_TOTP_SCHEME;
+use const Pyncer\Snyppet\Access\TOTP_METHOD_APP_PERIOD AS PYNCER_ACCESS_TOTP_METHOD_APP_PERIOD;
+use const Pyncer\Snyppet\Access\TOTP_METHOD_EMAIL_PERIOD AS PYNCER_ACCESS_TOTP_METHOD_EMAIL_PERIOD;
+use const Pyncer\Snyppet\Access\TOTP_METHOD_PHONE_PERIOD AS PYNCER_ACCESS_TOTP_METHOD_PHONE_PERIOD;
 
 class PatchTokenItemModule extends PyncerPatchTokenItemModule
 {
@@ -44,6 +48,15 @@ class PatchTokenItemModule extends PyncerPatchTokenItemModule
         }
 
         $totp = TOTP::createFromSecret($model->getSecret());
+
+        if ($model->getMethod() === TotpMethod::APP) {
+            $totp->setPeriod(PYNCER_ACCESS_TOTP_METHOD_APP_PERIOD);
+        } elseif ($model->getMethod() === TotpMethod::EMAIL) {
+            $totp->setPeriod(PYNCER_ACCESS_TOTP_METHOD_EMAIL_PERIOD);
+        } elseif ($model->getMethod() === TotpMethod::PHONE) {
+            $totp->setPeriod(PYNCER_ACCESS_TOTP_METHOD_PHONE_PERIOD);
+        }
+
         $code = $this->parsedBody->getString('code', null);
 
         if ($code === null) {

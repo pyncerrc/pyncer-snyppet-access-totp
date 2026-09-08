@@ -2,6 +2,7 @@
 namespace Pyncer\Snyppet\Access\Table\User\Totp;
 
 use Pyncer\Data\Model\AbstractModel;
+use Pyncer\Snyppet\Access\Totp\TotpMethod;
 
 class TotpModel extends AbstractModel
 {
@@ -12,6 +13,26 @@ class TotpModel extends AbstractModel
     public function setUserId(int $value): static
     {
         $this->set('user_id', $value);
+        return $this;
+    }
+
+    public function getMethod(): ?TotpMethod
+    {
+        $value = $this->get('method');
+
+        if ($value === null) {
+            return null;
+        }
+
+        return TotpMethod::from($value);
+    }
+    public function setMethod(null|string|TotpMethod $value): static
+    {
+        if ($value instanceof TotpMethod) {
+            $value = $value->value;
+        }
+
+        $this->set('method', $value);
         return $this;
     }
 
@@ -40,6 +61,7 @@ class TotpModel extends AbstractModel
         return [
             'id' => 0,
             'user_id' => 0,
+            'method' => 'app',
             'secret' => '',
             'enabled' => false,
         ];

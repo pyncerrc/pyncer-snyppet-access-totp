@@ -15,6 +15,7 @@ class Install extends AbstractInstall
         $this->connection->createTable('user__totp')
             ->serial('id')
             ->int('user_id', IntSize::BIG)->index()
+            ->enum('method', ['app', 'email', 'phone'])->default('app')->index()
             ->string('secret', 64)->index()
             ->bool('enabled')->default(false)->index()
             ->index('#unique', 'user_id')->unique()
