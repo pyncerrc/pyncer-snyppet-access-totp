@@ -5,6 +5,7 @@ use OTPHP\TOTP;
 use Psr\Http\Message\ResponseInterface as PsrResponseInterface;
 use Pyncer\App\Identifier as ID;
 use Pyncer\Component\Module\AbstractModule;
+use Pyncer\Data\Model\ModelInterface;
 use Pyncer\Database\Exception\QueryException;
 use Pyncer\Http\Message\JsonResponse;
 use Pyncer\Http\Message\Response;
@@ -16,16 +17,27 @@ use Pyncer\Snyppet\Access\User\LoginMethod;
 use Pyncer\Snyppet\Access\Totp\TotpMethod;
 
 use const Pyncer\Snyppet\Access\LOGIN_METHOD as PYNCER_ACCESS_LOGIN_METHOD;
-use const Pyncer\Snyppet\Access\TOTP_ISSUER as PYNCER_ACCESS_TOTP_ISSUER;
+use const Pyncer\Snyppet\Access\Totp\ISSUER as PYNCER_ACCESS_TOTP_ISSUER;
 
-use const Pyncer\Snyppet\Access\TOTP_METHOD_APP_ENABLED AS PYNCER_ACCESS_TOTP_METHOD_APP_ENABLED;
-use const Pyncer\Snyppet\Access\TOTP_METHOD_EMAIL_ENABLED AS PYNCER_ACCESS_TOTP_METHOD_EMAIL_ENABLED;
-use const Pyncer\Snyppet\Access\TOTP_METHOD_PHONE_ENABLED AS PYNCER_ACCESS_TOTP_METHOD_PHONE_ENABLED;
+use const Pyncer\Snyppet\Access\Totp\METHOD_APP_ENABLED AS PYNCER_ACCESS_TOTP_METHOD_APP_ENABLED;
+use const Pyncer\Snyppet\Access\Totp\METHOD_EMAIL_ENABLED AS PYNCER_ACCESS_TOTP_METHOD_EMAIL_ENABLED;
+use const Pyncer\Snyppet\Access\Totp\METHOD_PHONE_ENABLED AS PYNCER_ACCESS_TOTP_METHOD_PHONE_ENABLED;
 
 class PutTotpItemModule extends AbstractModule
 {
+    protected bool $confirmPassword = false;
     protected ?LoginMethod $loginMethod = null;
     protected ?string $issuer = null;
+
+    public function getConfirmPassword(): bool
+    {
+        return $this->confirmPassword;
+    }
+    public function setConfirmPassword(bool $value): static
+    {
+        $this->confirmPassword = $value;
+        return $this;
+    }
 
     public function getLoginMethod(): LoginMethod
     {
@@ -86,8 +98,6 @@ class PutTotpItemModule extends AbstractModule
 
     protected function getPrimaryResponse(): PsrResponseInterface
     {
-        $connection = $this->get(ID::DATABASE);
-
         $userId = $this->getUserId();
 
         if ($userId === 0) {
@@ -95,6 +105,8 @@ class PutTotpItemModule extends AbstractModule
                 Status::CLIENT_ERROR_403_FORBIDDEN
             );
         }
+
+        $connection = $this->get(ID::DATABASE);
 
         $enabled = $this->parsedBody->getBool('enabled');
         $insert = false;
@@ -116,6 +128,19 @@ class PutTotpItemModule extends AbstractModule
         }
 
         $errors = [];
+
+        if ($this->getConfirmPassword()) {
+            $userMapper = new UserMapper($connection);
+            $userModel = $userMapper->selectById($userId);
+
+            $password = $this->parsedBody->getString('password', null);
+
+            if ($password === null) {
+                $errors['password'] = 'required';
+            } elseif (!password_verify($password, $userModel->getPassword())) {
+                $errors['password'] = 'mismatch';
+            }
+        }
 
         $method = $this->parsedBody->getString('method', 'app');
         $method = TotpMethod::tryFrom($method);
@@ -176,48 +201,55 @@ class PutTotpItemModule extends AbstractModule
 
         if ($insert) {
             return new JsonResponse(
-                Status::SUCCESS_201_CREATED,
-                $body,
+                status: Status::SUCCESS_201_CREATED,
+                body: $body,
             );
         } else {
             return new JsonResponse(
-                Status::SUCCESS_200_OK,
-                $body,
+                status: Status::SUCCESS_200_OK,
+                body: $body,
             );
         }
     }
 
     protected function getResponseItemData(ModelInterface $model): array
     {
-        $totp = TOTP::createFromSecret($model->getSecret());
-
-        $loginMethod = $this->getLoginMethod();
-
-        $userMapper = new UserMapper($connection);
-        $userModel = $userMapper->selectById($model->getUserId());
-
-        if ($userModel !== null) {
-            $label = match($loginMethod) {
-                LoginMethod::EMAIL => $userModel->getEmail(),
-                LoginMethod::PHONE => $userModel->getPhone(),
-                LoginMethod::USERNAME => $userModel->getUsername(),
-                default => null,
-            }
-
-            if ($label !== null) {
-                $totp->setLabel($label);
-            }
-        }
-
-        $issuer = $this->getIssuer() ?? PYNCER_ACCESS_TOTP_ISSUER;
-
-        if ($issuer !== null) {
-            $totp->setIssuer($issuer);
-        }
-
-        return [
-            'provisioning_uri' => $totp->getProvisioningUri()
+        $data = [
+            'method' => $model->getMethod(),
+            'enabled' => $model->getEnabled(),
         ];
+
+        if ($model->getMethod() == TotpMethod::APP) {
+            $totp = TOTP::createFromSecret($model->getSecret());
+
+            $loginMethod = $this->getLoginMethod();
+
+            $userMapper = new UserMapper($connection);
+            $userModel = $userMapper->selectById($model->getUserId());
+
+            if ($userModel !== null) {
+                $label = match($loginMethod) {
+                    LoginMethod::EMAIL => $userModel->getEmail(),
+                    LoginMethod::PHONE => $userModel->getPhone(),
+                    LoginMethod::USERNAME => $userModel->getUsername(),
+                    default => null,
+                }
+
+                if ($label !== null) {
+                    $totp->setLabel($label);
+                }
+            }
+
+            $issuer = $this->getIssuer() ?? PYNCER_ACCESS_TOTP_ISSUER;
+
+            if ($issuer !== null) {
+                $totp->setIssuer($issuer);
+            }
+
+            $data['provisioning_uri'] = $totp->getProvisioningUri();
+        }
+
+        return $data;
     }
 
     protected function replaceItem(ModelInterface $model): array

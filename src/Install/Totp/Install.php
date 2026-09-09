@@ -1,5 +1,5 @@
 <?php
-namespace Pyncer\Snyppet\Access\Install\TOTP;
+namespace Pyncer\Snyppet\Access\Install\Totp;
 
 use Pyncer\Database\Table\Column\IntSize;
 use Pyncer\Database\Table\ReferentialAction;

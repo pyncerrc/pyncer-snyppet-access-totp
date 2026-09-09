@@ -6,10 +6,10 @@ use Pyncer\Snyppet\Access\Component\Module\Token\PatchTokenItemModule as PyncerP
 use Pyncer\Snyppet\Access\Table\User\Totp\TotpMapper;
 use Pyncer\Snyppet\Access\Totp\TotpMethod;
 
-use const Pyncer\Snyppet\Access\TOTP_SCHEME as PYNCER_ACCESS_TOTP_SCHEME;
-use const Pyncer\Snyppet\Access\TOTP_METHOD_APP_PERIOD AS PYNCER_ACCESS_TOTP_METHOD_APP_PERIOD;
-use const Pyncer\Snyppet\Access\TOTP_METHOD_EMAIL_PERIOD AS PYNCER_ACCESS_TOTP_METHOD_EMAIL_PERIOD;
-use const Pyncer\Snyppet\Access\TOTP_METHOD_PHONE_PERIOD AS PYNCER_ACCESS_TOTP_METHOD_PHONE_PERIOD;
+use const Pyncer\Snyppet\Access\Totp\SCHEME as PYNCER_ACCESS_TOTP_SCHEME;
+use const Pyncer\Snyppet\Access\Totp\METHOD_APP_PERIOD AS PYNCER_ACCESS_TOTP_METHOD_APP_PERIOD;
+use const Pyncer\Snyppet\Access\Totp\METHOD_EMAIL_PERIOD AS PYNCER_ACCESS_TOTP_METHOD_EMAIL_PERIOD;
+use const Pyncer\Snyppet\Access\Totp\METHOD_PHONE_PERIOD AS PYNCER_ACCESS_TOTP_METHOD_PHONE_PERIOD;
 
 class PatchTokenItemModule extends PyncerPatchTokenItemModule
 {
@@ -17,21 +17,6 @@ class PatchTokenItemModule extends PyncerPatchTokenItemModule
     {
         // ForgeMapperQuery will use this value.
         return PYNCER_ACCESS_TOTP_SCHEME;
-    }
-
-    protected function login(AccessManager $accessManager): ?bool
-    {
-        $result = parent::login($accessManager);
-
-        if ($result === true) {
-            $connection = $this->get(ID::DATABASE);
-
-            if ($model !== null && $model->getEnabled()) {
-                $this->isTotp = true;
-            }
-        }
-
-        return $result;
     }
 
     protected function updateItem(ModelInterface $model): array

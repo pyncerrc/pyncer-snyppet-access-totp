@@ -2,14 +2,19 @@
 namespace Pyncer\Snyppet\Access\Component\Module\Token\Totp;
 
 use OTPHP\TOTP;
+use Pyncer\App\Identifier as ID;
+use Pyncer\Data\Model\ModelInterface;
 use Pyncer\Snyppet\Access\Component\Module\Token\PostTokenItemModule as PyncerPostTokenItemModule;
 use Pyncer\Snyppet\Access\Table\User\Totp\TotpMapper;
 use Pyncer\Snyppet\Access\Table\User\Totp\TotpModel;
+use Pyncer\Snyppet\Access\Table\Token\TokenModel;
+use Pyncer\Snyppet\Access\Table\User\UserModel;
 use Pyncer\Snyppet\Access\Totp\TotpMethod;
+use Pyncer\Snyppet\Access\User\AccessManager;
 
-use const Pyncer\Snyppet\Access\TOTP_SCHEME as PYNCER_ACCESS_TOTP_SCHEME;
-use const Pyncer\Snyppet\Access\TOTP_METHOD_EMAIL_PERIOD AS PYNCER_ACCESS_TOTP_METHOD_EMAIL_PERIOD;
-use const Pyncer\Snyppet\Access\TOTP_METHOD_PHONE_PERIOD AS PYNCER_ACCESS_TOTP_METHOD_PHONE_PERIOD;
+use const Pyncer\Snyppet\Access\Totp\SCHEME as PYNCER_ACCESS_TOTP_SCHEME;
+use const Pyncer\Snyppet\Access\Totp\METHOD_EMAIL_PERIOD AS PYNCER_ACCESS_TOTP_METHOD_EMAIL_PERIOD;
+use const Pyncer\Snyppet\Access\Totp\METHOD_PHONE_PERIOD AS PYNCER_ACCESS_TOTP_METHOD_PHONE_PERIOD;
 
 abstract class AbstractPostTokenItemModule extends PyncerPostTokenItemModule
 {
@@ -26,7 +31,7 @@ abstract class AbstractPostTokenItemModule extends PyncerPostTokenItemModule
             $model = $mapper->selectByUserId($accessManager->getUserId());
 
             if ($model !== null && $model->getEnabled()) {
-                $this->totpModel = $model
+                $this->totpModel = $model;
             }
         }
 
@@ -79,10 +84,14 @@ abstract class AbstractPostTokenItemModule extends PyncerPostTokenItemModule
         return $errors;
     }
 
-    protected function getResponseUserData(ModelInterface $userModel): array
+    protected function getResponseItemData(TokenModel $tokenModel): array
     {
-        $data = parent::getResponseUserData($userModel);
-        $data['totp'] = ($this->totpModel !== null ? $this->totpModel->getMethod() : null);
+        $data = parent::getResponseItemData($tokenModel);
+        $data['totp'] = (
+            $this->totpModel !== null ?
+            $this->totpModel->getMethod()->value :
+            null
+        );
 
         return $data;
     }
