@@ -23,10 +23,15 @@ use const Pyncer\Snyppet\Access\Totp\METHOD_APP_ENABLED AS PYNCER_ACCESS_TOTP_ME
 use const Pyncer\Snyppet\Access\Totp\METHOD_EMAIL_ENABLED AS PYNCER_ACCESS_TOTP_METHOD_EMAIL_ENABLED;
 use const Pyncer\Snyppet\Access\Totp\METHOD_PHONE_ENABLED AS PYNCER_ACCESS_TOTP_METHOD_PHONE_ENABLED;
 
+use const Pyncer\Snyppet\Access\Totp\METHOD_APP_PERIOD AS PYNCER_ACCESS_TOTP_METHOD_APP_PERIOD;
+use const Pyncer\Snyppet\Access\Totp\METHOD_EMAIL_PERIOD AS PYNCER_ACCESS_TOTP_METHOD_EMAIL_PERIOD;
+use const Pyncer\Snyppet\Access\Totp\METHOD_PHONE_PERIOD AS PYNCER_ACCESS_TOTP_METHOD_PHONE_PERIOD;
+
 class PutTotpItemModule extends AbstractModule
 {
     protected bool $confirmPassword = false;
     protected ?LoginMethod $loginMethod = null;
+    protected bool $confirmAppCode = false;
     protected ?string $issuer = null;
 
     public function getConfirmPassword(): bool
@@ -36,6 +41,16 @@ class PutTotpItemModule extends AbstractModule
     public function setConfirmPassword(bool $value): static
     {
         $this->confirmPassword = $value;
+        return $this;
+    }
+
+    public function getConfirmAppCode(): bool
+    {
+        return $this->confirmAppCode;
+    }
+    public function setConfirmAppCode(bool $value): static
+    {
+        $this->confirmAppCode = $value;
         return $this;
     }
 
@@ -111,7 +126,7 @@ class PutTotpItemModule extends AbstractModule
         $enabled = $this->parsedBody->getBool('enabled');
         $insert = false;
 
-        $mapper new TotpMapper($connection);
+        $mapper = new TotpMapper($connection);
         $model = $mapper->selectByUserId($userId);
         if ($model === null) {
             if (!$enabled) {
@@ -133,12 +148,12 @@ class PutTotpItemModule extends AbstractModule
             $userMapper = new UserMapper($connection);
             $userModel = $userMapper->selectById($userId);
 
-            $password = $this->parsedBody->getString('password', null);
+            $password = $this->parsedBody->getString('password_old', null);
 
             if ($password === null) {
-                $errors['password'] = 'required';
+                $errors['password_old'] = 'required';
             } elseif (!password_verify($password, $userModel->getPassword())) {
-                $errors['password'] = 'mismatch';
+                $errors['password_old'] = 'mismatch';
             }
         }
 
@@ -146,19 +161,19 @@ class PutTotpItemModule extends AbstractModule
         $method = TotpMethod::tryFrom($method);
 
         if ($method === null) {
-            $errors['method'] = 'invalid'
+            $errors['method'] = 'invalid';
         } elseif ($method === TotpMethod::APP &&
             !PYNCER_ACCESS_TOTP_METHOD_APP_ENABLED
         ) {
-            $errors['method'] = 'invalid'
+            $errors['method'] = 'invalid';
         } elseif ($method === TotpMethod::EMAIL &&
             !PYNCER_ACCESS_TOTP_METHOD_EMAIL_ENABLED
         ) {
-            $errors['method'] = 'invalid'
+            $errors['method'] = 'invalid';
         } elseif ($method === TotpMethod::PHONE &&
             !PYNCER_ACCESS_TOTP_METHOD_PHONE_ENABLED
         ) {
-            $errors['method'] = 'invalid'
+            $errors['method'] = 'invalid';
         }
 
         if ($errors) {
@@ -174,9 +189,40 @@ class PutTotpItemModule extends AbstractModule
             $totp = TOTP::create();
 
             $model->setSecret($totp->getSecret());
+            $regenerate = true;
         }
 
         $model->setMethod($method);
+
+        if ($enabled &&
+            !$regenerate &&
+            $method === TotpMethod::APP &&
+            $this->getConfirmAppCode()
+        ) {
+            $code = $this->parsedBody->getString('code', null);
+            if ($code === null) {
+                $enabled = false;
+            } else {
+                $totp = TOTP::createFromSecret($model->getSecret());
+
+                $period = match ($method) {
+                    TotpMethod::APP => PYNCER_ACCESS_TOTP_METHOD_APP_PERIOD,
+                    TotpMethod::EMAIL => PYNCER_ACCESS_TOTP_METHOD_EMAIL_PERIOD,
+                    TotpMethod::PHONE => PYNCER_ACCESS_TOTP_METHOD_PHONE_PERIOD,
+                };
+
+                $totp->setPeriod($period);
+
+                if (!$totp->verify($code, null, 5)) {
+                    $errors['code'] = 'invalid';
+
+                    return new JsonResponse(
+                        Status::CLIENT_ERROR_422_UNPROCESSABLE_ENTITY,
+                        ['errors' => $errors]
+                    );
+                }
+            }
+        }
 
         $model->setEnabled($enabled);
 
@@ -222,8 +268,17 @@ class PutTotpItemModule extends AbstractModule
         if ($model->getMethod() == TotpMethod::APP) {
             $totp = TOTP::createFromSecret($model->getSecret());
 
+            $period = match ($model->getMethod()) {
+                TotpMethod::APP => PYNCER_ACCESS_TOTP_METHOD_APP_PERIOD,
+                TotpMethod::EMAIL => PYNCER_ACCESS_TOTP_METHOD_EMAIL_PERIOD,
+                TotpMethod::PHONE => PYNCER_ACCESS_TOTP_METHOD_PHONE_PERIOD,
+            };
+
+            $totp->setPeriod($period);
+
             $loginMethod = $this->getLoginMethod();
 
+            $connection = $this->get(ID::DATABASE);
             $userMapper = new UserMapper($connection);
             $userModel = $userMapper->selectById($model->getUserId());
 
@@ -233,7 +288,7 @@ class PutTotpItemModule extends AbstractModule
                     LoginMethod::PHONE => $userModel->getPhone(),
                     LoginMethod::USERNAME => $userModel->getUsername(),
                     default => null,
-                }
+                };
 
                 if ($label !== null) {
                     $totp->setLabel($label);
@@ -246,6 +301,7 @@ class PutTotpItemModule extends AbstractModule
                 $totp->setIssuer($issuer);
             }
 
+            $data['secret'] = $model->getSecret();
             $data['provisioning_uri'] = $totp->getProvisioningUri();
         }
 
@@ -263,9 +319,10 @@ class PutTotpItemModule extends AbstractModule
         }
 
         try {
-            $mapper new TotpMapper($connection);
+            $connection = $this->get(ID::DATABASE);
+            $mapper = new TotpMapper($connection);
             $mapper->replace($model);
-        } catch (QueryException) {
+        } catch (QueryException $e) {
             $errors['general'] = $error;
         }
 

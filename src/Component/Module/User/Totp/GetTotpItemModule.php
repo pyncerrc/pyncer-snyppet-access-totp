@@ -10,7 +10,7 @@ use Pyncer\Http\Message\Response;
 use Pyncer\Http\Message\Status;
 use Pyncer\Snyppet\Access\Table\User\Totp\TotpMapper;
 
-class GetUserIndexModule extends AbstractModule
+class GetTotpItemModule extends AbstractModule
 {
     protected function getUserId(): int
     {
@@ -38,7 +38,7 @@ class GetUserIndexModule extends AbstractModule
         }
 
         $connection = $this->get(ID::DATABASE);
-        $mapper new TotpMapper($connection);
+        $mapper = new TotpMapper($connection);
         $model = $mapper->selectByUserId($userId);
 
         if ($model === null) {

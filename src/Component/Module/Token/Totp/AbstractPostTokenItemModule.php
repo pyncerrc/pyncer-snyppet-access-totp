@@ -50,7 +50,7 @@ abstract class AbstractPostTokenItemModule extends PyncerPostTokenItemModule
         }
 
         if ($this->totpModel !== null &&
-            $totpModel->getMethod() !== TotpMethod::APP
+            $this->totpModel->getMethod() !== TotpMethod::APP
         ) {
             $userModel = $tokenModel->getSideModel('user');
 

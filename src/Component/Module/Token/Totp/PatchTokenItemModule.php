@@ -2,10 +2,13 @@
 namespace Pyncer\Snyppet\Access\Component\Module\Token\Totp;
 
 use OTPHP\TOTP;
+use Pyncer\App\Identifier as ID;
+use Pyncer\Data\Model\ModelInterface;
 use Pyncer\Snyppet\Access\Component\Module\Token\PatchTokenItemModule as PyncerPatchTokenItemModule;
 use Pyncer\Snyppet\Access\Table\User\Totp\TotpMapper;
 use Pyncer\Snyppet\Access\Totp\TotpMethod;
 
+use const Pyncer\Snyppet\Access\DEFAULT_SCHEME as PYNCER_ACCESS_DEFAULT_SCHEME;
 use const Pyncer\Snyppet\Access\Totp\SCHEME as PYNCER_ACCESS_TOTP_SCHEME;
 use const Pyncer\Snyppet\Access\Totp\METHOD_APP_PERIOD AS PYNCER_ACCESS_TOTP_METHOD_APP_PERIOD;
 use const Pyncer\Snyppet\Access\Totp\METHOD_EMAIL_PERIOD AS PYNCER_ACCESS_TOTP_METHOD_EMAIL_PERIOD;
@@ -21,10 +24,11 @@ class PatchTokenItemModule extends PyncerPatchTokenItemModule
 
     protected function updateItem(ModelInterface $model): array
     {
+        $connection = $this->get(ID::DATABASE);
         $mapper = new TotpMapper($connection);
-        $model = $mapper->selectByUserId($model->getUserId());
+        $totpModel = $mapper->selectByUserId($model->getUserId());
 
-        if ($model === null || !$model->getEnabled()) {
+        if ($totpModel === null || !$totpModel->getEnabled()) {
             $errors = [
                 'general' => 'disabled'
             ];
@@ -32,15 +36,15 @@ class PatchTokenItemModule extends PyncerPatchTokenItemModule
             return $errors;
         }
 
-        $totp = TOTP::createFromSecret($model->getSecret());
+        $totp = TOTP::createFromSecret($totpModel->getSecret());
 
-        if ($model->getMethod() === TotpMethod::APP) {
-            $totp->setPeriod(PYNCER_ACCESS_TOTP_METHOD_APP_PERIOD);
-        } elseif ($model->getMethod() === TotpMethod::EMAIL) {
-            $totp->setPeriod(PYNCER_ACCESS_TOTP_METHOD_EMAIL_PERIOD);
-        } elseif ($model->getMethod() === TotpMethod::PHONE) {
-            $totp->setPeriod(PYNCER_ACCESS_TOTP_METHOD_PHONE_PERIOD);
-        }
+        $period = match ($totpModel->getMethod()) {
+            TotpMethod::APP => PYNCER_ACCESS_TOTP_METHOD_APP_PERIOD,
+            TotpMethod::EMAIL => PYNCER_ACCESS_TOTP_METHOD_EMAIL_PERIOD,
+            TotpMethod::PHONE => PYNCER_ACCESS_TOTP_METHOD_PHONE_PERIOD,
+        };
+
+        $totp->setPeriod($period);
 
         $code = $this->parsedBody->getString('code', null);
 
@@ -52,7 +56,7 @@ class PatchTokenItemModule extends PyncerPatchTokenItemModule
             return $errors;
         }
 
-        if (!$totp->verify($code, null, 1)) {
+        if (!$totp->verify($code, null, 5)) {
             $errors = [
                 'code' => 'invalid'
             ];
