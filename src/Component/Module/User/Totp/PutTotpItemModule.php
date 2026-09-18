@@ -265,7 +265,9 @@ class PutTotpItemModule extends AbstractModule
             'enabled' => $model->getEnabled(),
         ];
 
-        if ($model->getMethod() == TotpMethod::APP) {
+        if ($model->getMethod() === TotpMethod::APP &&
+            $model->getEnabled()
+        ) {
             $totp = TOTP::createFromSecret($model->getSecret());
 
             $period = match ($model->getMethod()) {

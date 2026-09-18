@@ -52,29 +52,29 @@ abstract class AbstractPostTokenItemModule extends PyncerPostTokenItemModule
         if ($this->totpModel !== null &&
             $this->totpModel->getMethod() !== TotpMethod::APP
         ) {
-            $userModel = $tokenModel->getSideModel('user');
+            $userModel = $model->getSideModel('user');
 
-            $totp = TOTP::createFromSecret($model->getSecret());
+            $totp = TOTP::createFromSecret($this->totpModel->getSecret());
 
-            if ($totpModel->getMethod() !== TotpMethod::PHONE) {
+            if ($this->totpModel->getMethod() === TotpMethod::EMAIL) {
                 $totp->setPeriod(PYNCER_ACCESS_TOTP_METHOD_EMAIL_PERIOD);
-
-                if (!$this->sendTotpCode(
-                    $totp->now(),
-                    $userModel,
-                    null,
-                    $userModel->getPhone(),
-                )) {
-                    $errors = ['general' => 'send'];
-                }
-            } else {
-                $totp->setPeriod(PYNCER_ACCESS_TOTP_METHOD_PHONE_PERIOD);
 
                 if (!$this->sendTotpCode(
                     $totp->now(),
                     $userModel,
                     $userModel->getEmail(),
                     null,
+                )) {
+                    $errors = ['general' => 'send'];
+                }
+            } elseif ($this->totpModel->getMethod() === TotpMethod::PHONE) {
+                $totp->setPeriod(PYNCER_ACCESS_TOTP_METHOD_PHONE_PERIOD);
+
+                if (!$this->sendTotpCode(
+                    $totp->now(),
+                    $userModel,
+                    null,
+                    $userModel->getPhone(),
                 )) {
                     $errors = ['general' => 'send'];
                 }

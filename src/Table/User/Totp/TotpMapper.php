@@ -1,7 +1,7 @@
 <?php
 namespace Pyncer\Snyppet\Access\Table\User\Totp;
 
-use Pyncer\Snyppet\Access\Table\User\TotpModel;
+use Pyncer\Snyppet\Access\Table\User\Totp\TotpModel;
 use Pyncer\Data\Mapper\AbstractMapper;
 use Pyncer\Data\Model\ModelInterface;
 
